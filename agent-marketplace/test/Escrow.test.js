@@ -1,5 +1,6 @@
-const { expect } = require("chai");
-const { ethers } = require("hardhat");
+import { expect } from "chai";
+import hardhat from "hardhat";
+const { ethers } = hardhat;
 
 describe("Escrow", function () {
   let escrow, marketplace, seller, buyer, other;
