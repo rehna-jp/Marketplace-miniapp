@@ -1,30 +1,27 @@
 import { expect } from "chai";
-import hardhat from "hardhat";
-import * as time from "@nomicfoundation/hardhat-network-helpers";
-const { ethers } = hardhat;
+import { network } from "hardhat";
 
 describe("Marketplace", function () {
-  let escrow, marketplace, mockReputation;
+  let escrow, marketplace, mockReputation, ethers;
   let deployer, seller, buyer, other;
 
-  // Mock ERC-8004 Reputation Registry
-  async function deployMockReputation() {
+  async function deployMockReputation(ethers) {
     const MockRep = await ethers.getContractFactory("MockReputation");
-    return await MockRep.deploy();
+    const rep = await MockRep.deploy();
+    await rep.waitForDeployment();
+    return rep;
   }
 
   beforeEach(async function () {
+    ({ ethers } = await network.connect());
     [deployer, seller, buyer, other] = await ethers.getSigners();
 
-    // Deploy Escrow
     const Escrow = await ethers.getContractFactory("Escrow");
     escrow = await Escrow.deploy();
     await escrow.waitForDeployment();
 
-    // Deploy mock reputation
-    mockReputation = await deployMockReputation();
+    mockReputation = await deployMockReputation(ethers);
 
-    // Deploy Marketplace
     const Marketplace = await ethers.getContractFactory("Marketplace");
     marketplace = await Marketplace.deploy(
       await escrow.getAddress(),
@@ -32,7 +29,6 @@ describe("Marketplace", function () {
     );
     await marketplace.waitForDeployment();
 
-    // Transfer escrow ownership to marketplace
     await escrow.setMarketplace(await marketplace.getAddress());
   });
 
@@ -87,9 +83,8 @@ describe("Marketplace", function () {
       expect(order.buyer).to.equal(buyer.address);
       expect(order.seller).to.equal(seller.address);
       expect(order.price).to.equal(price);
-      expect(order.status).to.equal(1); // Matched
+      expect(order.status).to.equal(1);
 
-      // Funds should be in escrow
       const escrowBalance = await ethers.provider.getBalance(
         await escrow.getAddress()
       );
@@ -151,7 +146,7 @@ describe("Marketplace", function () {
     it("updates order status to Delivered", async function () {
       await marketplace.connect(buyer).confirmDelivery(1, 5);
       const order = await marketplace.orders(1);
-      expect(order.status).to.equal(2); // Delivered
+      expect(order.status).to.equal(2);
     });
 
     it("rejects confirmation from non-buyer", async function () {
@@ -184,50 +179,55 @@ describe("Marketplace", function () {
   });
 
   describe("claimRefund", function () {
-    beforeEach(async function () {
-      await marketplace
-        .connect(seller)
-        .listService("price-feed", ethers.parseEther("0.01"), 1);
-      await marketplace
-        .connect(buyer)
-        .placeOrder(1, 2, { value: ethers.parseEther("0.01") });
-    });
-
-    it("refunds buyer after deadline", async function () {
-      await time.increase(25 * 60 * 60); // 25 hours
-
-      const buyerBefore = await ethers.provider.getBalance(buyer.address);
-      const tx = await marketplace.connect(buyer).claimRefund(1);
-      const receipt = await tx.wait();
-      const gasCost = receipt.gasUsed * tx.gasPrice;
-      const buyerAfter = await ethers.provider.getBalance(buyer.address);
-
-      expect(buyerAfter - buyerBefore + gasCost).to.equal(
-        ethers.parseEther("0.01")
-      );
-    });
-
-    it("rejects refund before deadline", async function () {
-      await expect(
-        marketplace.connect(buyer).claimRefund(1)
-      ).to.be.revertedWith("Deadline not reached yet");
-    });
-
-    it("rejects refund from non-buyer", async function () {
-      await time.increase(25 * 60 * 60);
-      await expect(
-        marketplace.connect(other).claimRefund(1)
-      ).to.be.revertedWith("Only buyer can claim refund");
-    });
-
-    it("rejects double refund", async function () {
-      await time.increase(25 * 60 * 60);
-      await marketplace.connect(buyer).claimRefund(1);
-      await expect(
-        marketplace.connect(buyer).claimRefund(1)
-      ).to.be.revertedWith("Wrong order status");
-    });
+  beforeEach(async function () {
+    await marketplace
+      .connect(seller)
+      .listService("price-feed", ethers.parseEther("0.01"), 1);
+    await marketplace
+      .connect(buyer)
+      .placeOrder(1, 2, { value: ethers.parseEther("0.01") });
   });
+
+  it("refunds buyer after deadline", async function () {
+    await ethers.provider.send("evm_increaseTime", [25 * 60 * 60]);
+    await ethers.provider.send("evm_mine", []);
+
+    const buyerBefore = await ethers.provider.getBalance(buyer.address);
+    const tx = await marketplace.connect(buyer).claimRefund(1);
+    const receipt = await tx.wait();
+    const gasCost = receipt.gasUsed * tx.gasPrice;
+    const buyerAfter = await ethers.provider.getBalance(buyer.address);
+
+    expect(buyerAfter - buyerBefore + gasCost).to.equal(
+      ethers.parseEther("0.01")
+    );
+  });
+
+  it("rejects refund before deadline", async function () {
+    await expect(
+      marketplace.connect(buyer).claimRefund(1)
+    ).to.be.revertedWith("Deadline not reached yet");
+  });
+
+  it("rejects refund from non-buyer", async function () {
+    await ethers.provider.send("evm_increaseTime", [25 * 60 * 60]);
+    await ethers.provider.send("evm_mine", []);
+
+    await expect(
+      marketplace.connect(other).claimRefund(1)
+    ).to.be.revertedWith("Only buyer can claim refund");
+  });
+
+  it("rejects double refund", async function () {
+    await ethers.provider.send("evm_increaseTime", [25 * 60 * 60]);
+    await ethers.provider.send("evm_mine", []);
+
+    await marketplace.connect(buyer).claimRefund(1);
+    await expect(
+      marketplace.connect(buyer).claimRefund(1)
+    ).to.be.revertedWith("Wrong order status");
+  });
+});
 
   describe("deactivateListing", function () {
     it("deactivates a listing", async function () {

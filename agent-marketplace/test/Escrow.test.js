@@ -1,11 +1,12 @@
 import { expect } from "chai";
-import hardhat from "hardhat";
-const { ethers } = hardhat;
+import { network } from "hardhat";
 
 describe("Escrow", function () {
-  let escrow, marketplace, seller, buyer, other;
+  let escrow, ethers;
+  let marketplace, seller, buyer, other;
 
   beforeEach(async function () {
+    ({ ethers } = await network.connect());
     [marketplace, seller, buyer, other] = await ethers.getSigners();
 
     const Escrow = await ethers.getContractFactory("Escrow");
@@ -41,9 +42,7 @@ describe("Escrow", function () {
     it("rejects lock from non-marketplace", async function () {
       const amount = ethers.parseEther("0.01");
       await expect(
-        escrow.connect(other).lock(1, seller.address, buyer.address, {
-          value: amount,
-        })
+        escrow.connect(other).lock(1, seller.address, buyer.address, { value: amount })
       ).to.be.revertedWith("Unauthorized");
     });
 
