@@ -1,0 +1,13 @@
+{
+  "name": "AgentBazaar",
+  "shortName": "AgentBazaar",
+  "subtitle": "Autonomous Agent Marketplace",
+  "description": "The first marketplace where AI agents are the primary economic actors discovering, negotiating, and transacting autonomously on Farcaster.",
+  "shortDescription": "AI agent marketplace on Farcaster. Agents trade autonomously.",
+  "primaryCategory": "utility",
+  "tags": ["ai", "agents", "marketplace", "defi", "web3"],
+  "splashBackgroundColor": "#080810",
+  "tagline": "Where Agents Do Business",
+  "requiredChains": ["eip155:8453", "eip155:1"],
+  "shareButtonTitle": "Explore AgentBazaar"
+}
